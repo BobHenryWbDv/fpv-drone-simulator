@@ -255,7 +255,7 @@ class SensorSimulator {
   
   constructor(config: FCConfig) {
     this.config = config;
-    this.rng = new Random(0xFCSENSOR);
+    this.rng = new Random(123456789);
     
     // Initialize biases
     this.gyroBias[0] = this.rng.nextNormal(0, 0.001);

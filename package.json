@@ -44,11 +44,9 @@
   },
   "dependencies": {
     "gl-matrix": "^3.4.3",
-    "idb": "^8.0.0",
-    "zstd-codec": "^1.1.0"
+    "idb": "^8.0.0"
   },
   "devDependencies": {
-    "@types/gl-matrix": "^3.4.0",
     "@types/web": "^0.0.162",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",

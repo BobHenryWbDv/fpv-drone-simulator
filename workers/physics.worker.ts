@@ -231,7 +231,7 @@ class PhysicsEngine {
       simTime: 0,
       frameCount: 0,
       lastControlSequence: -1,
-      rng: new Random(0xFPV2026),
+      rng: new Random(987654321),
       motorSubSteps: 0,
       stepCount: 0,
       lastPerfReport: performance.now(),
