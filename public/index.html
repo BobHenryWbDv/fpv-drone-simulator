@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="FPV Drone Simulator - Browser-based FPV drone simulator with Betaflight-compatible flight controller">
+  <title>FPV Drone Simulator</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/icons/favicon.svg">
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0f172a;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+    
+    #sim-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    
+    /* Loading screen */
+    #loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      color: #e2e8f0;
+      transition: opacity 0.3s, visibility 0.3s;
+    }
+    
+    #loading-screen.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    
+    .loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid #1e293b;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .loading-text {
+      font-size: 1.125rem;
+      color: #94a3b8;
+    }
+    
+    /* Debug HUD */
+    #debug-hud {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      background: rgba(15, 23, 42, 0.9);
+      color: #22c55e;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      z-index: 100;
+      pointer-events: none;
+      white-space: pre;
+      display: none;
+    }
+    
+    #debug-hud.visible {
+      display: block;
+    }
+    
+    /* FPV HUD Overlay */
+    #fpv-hud {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 50;
+      display: none;
+    }
+    
+    #fpv-hud.visible {
+      display: block;
+    }
+    
+    /* OSD Elements */
+    .osd-element {
+      position: absolute;
+      color: #fff;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.7rem;
+      text-shadow: 0 0 2px #000, 0 0 4px #000;
+      pointer-events: none;
+    }
+    
+    /* Menu Overlay */
+    .menu-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s, visibility 0.2s;
+    }
+    
+    .menu-overlay.visible {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    .menu-panel {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 1rem;
+      padding: 2rem;
+      max-width: 480px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    
+    .menu-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #f8fafc;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    
+    .menu-section {
+      margin-bottom: 1.5rem;
+    }
+    
+    .menu-section-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+    }
+    
+    .menu-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid #334155;
+    }
+    
+    .menu-item:last-child {
+      border-bottom: none;
+    }
+    
+    .menu-item-label {
+      color: #e2e8f0;
+      font-size: 0.9375rem;
+    }
+    
+    .menu-item-value {
+      color: #94a3b8;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.8125rem;
+    }
+    
+    .menu-buttons {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+    
+    .btn {
+      padding: 0.625rem 1.25rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+    
+    .btn-secondary {
+      background: #334155;
+      color: #e2e8f0;
+    }
+    
+    .btn-secondary:hover {
+      background: #475569;
+    }
+    
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+    
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+    
+    /* Slider */
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    
+    .slider {
+      flex: 1;
+      accent-color: #3b82f6;
+    }
+    
+    /* Select */
+    select {
+      background: #0f172a;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 0.375rem;
+      padding: 0.375rem 0.75rem;
+      font-size: 0.8125rem;
+    }
+    
+    select:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    
+    /* Checkbox */
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      color: #e2e8f0;
+    }
+    
+    .checkbox-label input[type="checkbox"] {
+      width: 1rem;
+      height: 1rem;
+      accent-color: #3b82f6;
+    }
+    
+    /* Tab Navigation */
+    .tab-nav {
+      display: flex;
+      gap: 0.25rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 0.5rem;
+    }
+    
+    .tab-btn {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      padding: 0.5rem 1rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    
+    .tab-btn:hover {
+      color: #e2e8f0;
+      background: #334155;
+    }
+    
+    .tab-btn.active {
+      color: #3b82f6;
+      background: #1e293b;
+    }
+    
+    /* Hidden utility */
+    .hidden {
+      display: none !important;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .menu-panel {
+        padding: 1.5rem;
+        width: 95%;
+      }
+      
+      .menu-buttons {
+        flex-direction: column;
+      }
+      
+      .btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="loading-screen" role="status" aria-label="Loading FPV Drone Simulator">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Initializing FPV Drone Simulator...</div>
+  </div>
+  
+  <div id="app"></div>
+  
+  <!-- Debug HUD -->
+  <pre id="debug-hud" aria-hidden="true"></pre>
+  
+  <!-- FPV HUD Overlay -->
+  <div id="fpv-hud" aria-hidden="true">
+    <!-- OSD elements will be injected here -->
+  </div>
+  
+  <!-- Main Menu -->
+  <div id="main-menu" class="menu-overlay" role="dialog" aria-modal="true" aria-labelledby="main-menu-title">
+    <div class="menu-panel">
+      <h1 id="main-menu-title" class="menu-title">FPV Drone Simulator</h1>
+      
+      <div class="tab-nav" role="tablist">
+        <button class="tab-btn active" role="tab" data-tab="fly">Free Flight</button>
+        <button class="tab-btn" role="tab" data-tab="training">Training</button>
+        <button class="tab-btn" role="tab" data-tab="multiplayer">Multiplayer</button>
+        <button class="tab-btn" role="tab" data-tab="settings">Settings</button>
+      </div>
+      
+      <!-- Free Flight Tab -->
+      <div id="tab-fly" class="tab-panel" role="tabpanel">
+        <div class="menu-section">
+          <div class="menu-section-title">Quad Selection</div>
+          <div class="menu-item">
+            <span class="menu-item-label">Profile</span>
+            <select id="quad-profile-select">
+              <option value="default-5inch">5" Freestyle (Default)</option>
+              <option value="race-5inch">5" Race</option>
+              <option value="cinewhoop-3inch">3" Cinewhoop</option>
+              <option value="tinywhoop-65mm">65mm Tiny Whoop</option>
+              <option value="longrange-7inch">7" Long Range</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="menu-section">
+          <div class="menu-section-title">Environment</div>
+          <div class="menu-item">
+            <span class="menu-item-label">Map</span>
+            <select id="map-select">
+              <option value="field">Open Field</option>
+              <option value="forest">Forest</option>
+              <option value="warehouse">Abandoned Warehouse</option>
+              <option value="race-track">Race Track</option>
+              <option value="urban">Urban Playground</option>
+              <option value="mountain">Mountain Ridge</option>
+            </select>
+          </div>
+          <div class="menu-item">
+            <span class="menu-item-label">Time of Day</span>
+            <select id="time-select">
+              <option value="morning">Morning</option>
+              <option value="noon">Noon</option>
+              <option value="evening">Golden Hour</option>
+              <option value="night">Night</option>
+            </select>
+          </div>
+          <div class="menu-item">
+            <span class="menu-item-label">Weather</span>
+            <select id="weather-select">
+              <option value="clear">Clear</option>
+              <option value="cloudy">Cloudy</option>
+              <option value="windy">Windy</option>
+              <option value="rain">Rain</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="menu-buttons">
+          <button class="btn btn-primary" id="btn-start-flight">Start Flight</button>
+          <button class="btn btn-secondary" id="btn-calibration">Calibrate Radio</button>
+        </div>
+      </div>
+      
+      <!-- Training Tab -->
+      <div id="tab-training" class="tab-panel hidden" role="tabpanel">
+        <div class="menu-section">
+          <div class="menu-section-title">Maneuver Training</div>
+          <div class="menu-item">
+            <span class="menu-item-label">Maneuver</span>
+            <select id="maneuver-select">
+              <option value="hover">Basic Hover</option>
+              <option value="figure8">Figure 8</option>
+              <option value="split-s">Split-S</option>
+              <option value="power-loop">Power Loop</option>
+              <option value="cuban-8">Cuban 8</option>
+              <option value="imidazol">Imidazol</option>
+              <option value="roof-top">Roof Top</option>
+              <option value="matty-flip">Matty Flip</option>
+              <option value="triple-backflip">Triple Backflip</option>
+              <option value="yaw-spin">Yaw Spin</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="menu-section">
+          <div class="menu-section-title">Courses</div>
+          <div class="menu-item">
+            <span class="menu-item-label">Course</span>
+            <select id="course-select">
+              <option value="beginner-1">Beginner Course 1 - Basics</option>
+              <option value="beginner-2">Beginner Course 2 - Turns</option>
+              <option value="intermediate-1">Intermediate 1 - Gates</option>
+              <option value="intermediate-2">Intermediate 2 - Combos</option>
+              <option value="advanced-1">Advanced 1 - Freestyle Line</option>
+              <option value="race-1">Race Track 1 - Qualification</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="menu-buttons">
+          <button class="btn btn-primary" id="btn-start-training">Start Training</button>
+          <button class="btn btn-secondary" id="btn-view-ghosts">View Ghosts</button>
+        </div>
+      </div>
+      
+      <!-- Multiplayer Tab -->
+      <div id="tab-multiplayer" class="tab-panel hidden" role="tabpanel">
+        <div class="menu-section">
+          <div class="menu-section-title">Session</div>
+          <div class="menu-item">
+            <span class="menu-item-label">Mode</span>
+            <select id="mp-mode-select">
+              <option value="race">Race (8 pilots)</option>
+              <option value="freestyle">Freestyle Jam (16 pilots)</option>
+              <option value="training">Training Session (4 pilots)</option>
+            </select>
+          </div>
+          <div class="menu-item">
+            <span class="menu-item-label">Track</span>
+            <select id="mp-track-select">
+              <option value="track-1">Circuit Alpha</option>
+              <option value="track-2">Circuit Beta</option>
+              <option value="track-3">Freestyle Plaza</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="menu-section">
+          <div class="menu-section-title">Connection</div>
+          <div class="menu-item">
+            <label class="checkbox-label">
+              <input type="checkbox" id="mp-host" checked>
+              <span>Host Session</span>
+            </label>
+          </div>
+          <div class="menu-item">
+            <span class="menu-item-label">Region</span>
+            <select id="mp-region-select">
+              <option value="auto">Auto</option>
+              <option value="us-east">US East</option>
+              <option value="us-west">US West</option>
+              <option value="eu-west">EU West</option>
+              <option value="ap-southeast">Asia Pacific</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="menu-buttons">
+          <button class="btn btn-primary" id="btn-join-mp">Join / Create Session</button>
+          <button class="btn btn-secondary" id="btn-spectate">Spectate</button>
+        </div>
+      </div>
+      
+      <!-- Settings Tab -->
+      <div id="tab-settings" class="tab-panel hidden" role="tabpanel">
+        <div class="tab-nav" role="tablist">
+          <button class="tab-btn active" role="tab" data-tab="settings-controls">Controls</button>
+          <button class="tab-btn" role="tab" data-tab="settings-graphics">Graphics</button>
+          <button class="tab-btn" role="tab" data-tab="settings-fc">Flight Controller</button>
+          <button class="tab-btn" role="tab" data-tab="settings-audio">Audio</button>
+        </div>
+        
+        <!-- Controls Settings -->
+        <div id="tab-settings-controls" class="tab-panel" role="tabpanel">
+          <div class="menu-section">
+            <div class="menu-section-title">Radio / Input</div>
+            <div class="menu-item">
+              <span class="menu-item-label">Control Mode</span>
+              <select id="control-mode-select">
+                <option value="2">Mode 2 (Throttle Left)</option>
+                <option value="1">Mode 1 (Throttle Right)</option>
+              </select>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="expo-enabled" checked>
+                <span>Expo Enabled</span>
+              </label>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Roll Rate</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="roll-rate-slider" min="100" max="3000" value="800" step="50">
+                <span class="menu-item-value" id="roll-rate-value">800 °/s</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Pitch Rate</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="pitch-rate-slider" min="100" max="3000" value="800" step="50">
+                <span class="menu-item-value" id="pitch-rate-value">800 °/s</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Yaw Rate</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="yaw-rate-slider" min="100" max="2000" value="600" step="50">
+                <span class="menu-item-value" id="yaw-rate-value">600 °/s</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Roll Expo</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="roll-expo-slider" min="0" max="1" value="0.35" step="0.01">
+                <span class="menu-item-value" id="roll-expo-value">0.35</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Pitch Expo</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="pitch-expo-slider" min="0" max="1" value="0.35" step="0.01">
+                <span class="menu-item-value" id="pitch-expo-value">0.35</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Yaw Expo</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="yaw-expo-slider" min="0" max="1" value="0.45" step="0.01">
+                <span class="menu-item-value" id="yaw-expo-value">0.45</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Graphics Settings -->
+        <div id="tab-settings-graphics" class="tab-panel hidden" role="tabpanel">
+          <div class="menu-section">
+            <div class="menu-section-title">Quality</div>
+            <div class="menu-item">
+              <span class="menu-item-label">Preset</span>
+              <select id="graphics-preset-select">
+                <option value="low">Low (30 FPS target)</option>
+                <option value="medium">Medium (60 FPS)</option>
+                <option value="high" selected>High (90 FPS)</option>
+                <option value="ultra">Ultra (120+ FPS)</option>
+                <option value="auto">Auto Detect</option>
+              </select>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="vsync-enabled" checked>
+                <span>V-Sync</span>
+              </label>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="msaa-enabled">
+                <span>MSAA 4x</span>
+              </label>
+            </div>
+          </div>
+          
+          <div class="menu-section">
+            <div class="menu-section-title">FPV Camera</div>
+            <div class="menu-item">
+              <span class="menu-item-label">FOV</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="fov-slider" min="90" max="170" value="120" step="1">
+                <span class="menu-item-value" id="fov-value">120°</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Camera Tilt</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="camera-tilt-slider" min="0" max="60" value="25" step="1">
+                <span class="menu-item-value" id="camera-tilt-value">25°</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="rolling-shutter-enabled">
+                <span>Rolling Shutter Simulation</span>
+              </label>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="vibration-enabled" checked>
+                <span>Motor Vibration</span>
+              </label>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="osd-enabled" checked>
+                <span>Betaflight OSD</span>
+              </label>
+            </div>
+          </div>
+          
+          <div class="menu-section">
+            <div class="menu-section-title">Effects</div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="motion-blur-enabled" checked>
+                <span>Motion Blur</span>
+              </label>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="bloom-enabled" checked>
+                <span>Bloom</span>
+              </label>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="chromatic-aberration-enabled">
+                <span>Chromatic Aberration</span>
+              </label>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="film-grain-enabled">
+                <span>Film Grain</span>
+              </label>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="volumetric-clouds-enabled" checked>
+                <span>Volumetric Clouds</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Flight Controller Settings -->
+        <div id="tab-settings-fc" class="tab-panel hidden" role="tabpanel">
+          <div class="menu-section">
+            <div class="menu-section-title">PID Profile</div>
+            <div class="menu-item">
+              <span class="menu-item-label">Active Profile</span>
+              <select id="pid-profile-select">
+                <option value="0">Profile 0 - Race</option>
+                <option value="1">Profile 1 - Freestyle</option>
+                <option value="2">Profile 2 - Cinematic</option>
+                <option value="3">Profile 3 - Custom</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="menu-section">
+            <div class="menu-section-title">PID Gains (Profile 0)</div>
+            <div class="menu-item">
+              <span class="menu-item-label">Roll P</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="roll-p-slider" min="0" max="200" value="55" step="1">
+                <span class="menu-item-value" id="roll-p-value">55</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Roll I</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="roll-i-slider" min="0" max="200" value="70" step="1">
+                <span class="menu-item-value" id="roll-i-value">70</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Roll D</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="roll-d-slider" min="0" max="100" value="28" step="1">
+                <span class="menu-item-value" id="roll-d-value">28</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Pitch P</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="pitch-p-slider" min="0" max="200" value="55" step="1">
+                <span class="menu-item-value" id="pitch-p-value">55</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Pitch I</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="pitch-i-slider" min="0" max="200" value="70" step="1">
+                <span class="menu-item-value" id="pitch-i-value">70</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Pitch D</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="pitch-d-slider" min="0" max="100" value="28" step="1">
+                <span class="menu-item-value" id="pitch-d-value">28</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Yaw P</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="yaw-p-slider" min="0" max="200" value="60" step="1">
+                <span class="menu-item-value" id="yaw-p-value">60</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Yaw I</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="yaw-i-slider" min="0" max="200" value="45" step="1">
+                <span class="menu-item-value" id="yaw-i-value">45</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="menu-section">
+            <div class="menu-section-title">Filters</div>
+            <div class="menu-item">
+              <span class="menu-item-label">Gyro LPF</span>
+              <select id="gyro-lpf-select">
+                <option value="1">PT1</option>
+                <option value="2" selected>PT2</option>
+                <option value="3">Biquad</option>
+              </select>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Gyro LPF Hz</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="gyro-lpf-hz-slider" min="50" max="500" value="200" step="10">
+                <span class="menu-item-value" id="gyro-lpf-hz-value">200 Hz</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">D-term Filter</span>
+              <select id="dterm-filter-select">
+                <option value="0">Off</option>
+                <option value="1" selected>PT1</option>
+                <option value="2">PT2</option>
+                <option value="3">Biquad</option>
+              </select>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">D-term Hz</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="dterm-hz-slider" min="10" max="200" value="30" step="5">
+                <span class="menu-item-value" id="dterm-hz-value">30 Hz</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="rpm-filter-enabled" checked>
+                <span>RPM Filter</span>
+              </label>
+            </div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="dyn-lpf-enabled" checked>
+                <span>Dynamic LPF</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Audio Settings -->
+        <div id="tab-settings-audio" class="tab-panel hidden" role="tabpanel">
+          <div class="menu-section">
+            <div class="menu-section-title">Volume</div>
+            <div class="menu-item">
+              <span class="menu-item-label">Master</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="master-volume-slider" min="0" max="1" value="0.8" step="0.05">
+                <span class="menu-item-value" id="master-volume-value">80%</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Motor</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="motor-volume-slider" min="0" max="1" value="0.7" step="0.05">
+                <span class="menu-item-value" id="motor-volume-value">70%</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Wind</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="wind-volume-slider" min="0" max="1" value="0.5" step="0.05">
+                <span class="menu-item-value" id="wind-volume-value">50%</span>
+              </div>
+            </div>
+            <div class="menu-item">
+              <span class="menu-item-label">Impacts</span>
+              <div class="slider-container">
+                <input type="range" class="slider" id="impact-volume-slider" min="0" max="1" value="0.9" step="0.05">
+                <span class="menu-item-value" id="impact-volume-value">90%</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="menu-section">
+            <div class="menu-section-title">Spatial Audio</div>
+            <div class="menu-item">
+              <label class="checkbox-label">
+                <input type="checkbox" id="spatial-audio-enabled" checked>
+                <span>Enable Spatial Audio (HRTF)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Pause Menu -->
+  <div id="pause-menu" class="menu-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+    <div class="menu-panel" style="text-align: center;">
+      <h1 id="pause-title" class="menu-title">Paused</h1>
+      <div class="menu-buttons" style="flex-direction: column;">
+        <button class="btn btn-primary" id="btn-resume">Resume</button>
+        <button class="btn btn-secondary" id="btn-restart">Restart Flight</button>
+        <button class="btn btn-secondary" id="btn-settings-from-pause">Settings</button>
+        <button class="btn btn-secondary" id="btn-exit-flight">Exit to Menu</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- CLI Console -->
+  <div id="cli-console" class="menu-overlay" role="dialog" aria-modal="true" aria-labelledby="cli-title">
+    <div class="menu-panel" style="max-width: 700px; max-height: 80vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h1 id="cli-title" class="menu-title" style="margin: 0;">FC CLI Console</h1>
+        <button class="btn btn-secondary" id="btn-close-cli">Close</button>
+      </div>
+      <div id="cli-output" style="
+        flex: 1; overflow-y: auto; background: #0f172a; border: 1px solid #334155;
+        border-radius: 0.5rem; padding: 1rem; font-family: monospace; font-size: 0.75rem;
+        color: #22c55e; line-height: 1.6; white-space: pre-wrap;
+      "></div>
+      <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+        <input type="text" id="cli-input" placeholder="Enter CLI command (e.g., 'status', 'set pid_profile_0_pid 55 70 28 100...')" style="
+          flex: 1; background: #0f172a; border: 1px solid #334155; border-radius: 0.375rem;
+          padding: 0.5rem; color: #e2e8f0; font-family: monospace; font-size: 0.8125rem;
+        ">
+        <button class="btn btn-primary" id="btn-cli-send">Send</button>
+      </div>
+    </div>
+  </div>
+  
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

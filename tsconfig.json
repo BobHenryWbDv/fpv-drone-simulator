@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@core/*": ["src/core/*"],
+      "@graphics/*": ["src/graphics/*"],
+      "@input/*": ["src/input/*"],
+      "@training/*": ["src/training/*"],
+      "@telemetry/*": ["src/telemetry/*"],
+      "@multiplayer/*": ["src/multiplayer/*"],
+      "@persistence/*": ["src/persistence/*"],
+      "@ui/*": ["src/ui/*"],
+      "@audio/*": ["src/audio/*"],
+      "@utils/*": ["src/utils/*"],
+      "@workers/*": ["workers/*"]
+    },
+    "types": ["vite/client", "vite-plugin-pwa/client", "web"],
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*",
+    "workers/**/*",
+    "tests/**/*",
+    "vite.config.ts",
+    "vite.worker.config.ts"
+  ],
+  "exclude": ["node_modules", "dist", "public"]
+}
